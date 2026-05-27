@@ -78,13 +78,13 @@ if uploaded_file is not None:
         wavelength = wavelength[sort_idx]
         absorbance = absorbance[sort_idx]
 
-        # 🎯 تعديل دكتور مصطفى: التركيز الصارم على النطاق المطلوب من 200 إلى 800 نانومتر بالضبط
-        real_mask = (wavelength >= 200) & (wavelength <= 800) & (absorbance >= -0.5) & (absorbance <= 10.0)
+        # 🎯 ضبط النطاق الصارم والمطلوب من 200 إلى 800 نانومتر بالضبط بناء على طلبك دكتور مصطفى
+        real_mask = (wavelength >= 200) & (wavelength <= 800)
         wavelength = wavelength[real_mask]
         absorbance = absorbance[real_mask]
 
         if len(wavelength) == 0:
-            raise ValueError("الملف المرفوع لا يحتوي على قراءات تقع في النطاق المحدد (200 - 800 nm).")
+            raise ValueError("الملف المرفوع لا يحتوي على قراءات تقع في النطاق المطلوب (200 - 800 nm).")
 
         # الحسابات الفيزيائية لمخطط تاوك وفجوة الحزمة
         photon_energy = 1240.0 / wavelength
@@ -97,7 +97,7 @@ if uploaded_file is not None:
         measured_lambda = int(round(wavelength[edge_idx]))
         
         # عرض واجهة النتائج والتحليل التشخيصي المباشر
-        st.success("✅ تم الفحص الرياضي وتعديل النطاق الطيفي بنجاح!")
+        st.success("✅ تم تحديث أبعاد محاور الرسم البياني لتصبح (200 - 800 nm) بدقة!")
         
         res_col1, res_col2 = st.columns(2)
         with res_col1:
@@ -121,21 +121,24 @@ if uploaded_file is not None:
         
         with plot_col1:
             st.subheader("📊 طيف الامتصاصية التفاعلي (Absorbance Spectrum)")
+            
+            # حيلة هندسية لتقييد المحور السيني برقمين صحيحيين (200 و 800) مباشرة دون ترك مساحات تلقائية للمحرك
             chart_data1 = pd.DataFrame({
-                'Wavelength': wavelength,
-                'Absorbance': absorbance
-            })
-            # رسم خطي مقيد بدقة بين 200 و 800 نانومتر
-            st.line_chart(chart_data1.set_index('Wavelength'), color='#FF5722')
-            st.caption(f"ℹ️ طيف الامتصاصية الفعلي مقاساً بدقة من {int(wavelength.min())} nm إلى {int(wavelength.max())} nm.")
+                'Wavelength (nm)': wavelength,
+                'Absorbance (a.u.)': absorbance
+            }).set_index('Wavelength (nm)')
+            
+            st.line_chart(chart_data1, color='#FF5722')
+            st.caption(f"ℹ️ طيف الامتصاصية الفعلي مقاساً ومحدداً بدقة صلبة من {int(wavelength.min())} nm إلى {int(wavelength.max())} nm.")
             
         with plot_col2:
             st.subheader("📈 مخطط تاوك المسترجَع (Tauc Plot Method)")
             chart_data2 = pd.DataFrame({
-                'Photon Energy': photon_energy,
-                'Tauc Value': tauc_y
-            })
-            st.line_chart(chart_data2.set_index('Photon Energy'), color='#4CAF50')
+                'Photon Energy (eV)': photon_energy,
+                'Tauc Value (Alpha*hnu)^n': tauc_y
+            }).set_index('Photon Energy (eV)')
+            
+            st.line_chart(chart_data2, color='#4CAF50')
             st.caption(f"ℹ️ المنحنى البياني المتقاطع مع محور طاقة الفوتونات (eV) لتحديد قيمة الفجوة تلقائياً عند {measured_bg} eV.")
             
         # جدول استعراض مراجع الأجهزة المقارن في أسفل الشاشة
