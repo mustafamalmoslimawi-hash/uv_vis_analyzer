@@ -9,7 +9,7 @@ st.markdown("<h1 style='text-align: center; color: #FF5722;'>UV-Vis Spectroscopi
 st.markdown("<h4 style='text-align: center; color: #555;'>AUTOMATED OPTICAL CHARACTERIZATION & TAUC PLOT DIAGNOSIS</h4>", unsafe_allow_html=True)
 st.write("---")
 
-# قاعدة البيانات المرجعية القياسية المدمجة للتشخيص التلقائي الفوري (1000 مادة كخلفية علمية)
+# قاعدة البيانات المرجعية القياسية المدمجة للتشخيص التلقائي الفوري
 REFERENCE_UV_DATA = {
     "NiO (Nickel Oxide)": {"eg": 3.65, "lambda_max": 340.0},
     "ZnO (Zinc Oxide)": {"eg": 3.37, "lambda_max": 368.0},
@@ -29,28 +29,25 @@ transition_type = st.sidebar.selectbox(
 
 exponent = 2.0 if "Direct" in transition_type else 0.5
 
-# مركز رفع الملفات المعملية المستخرجة من أجهزة القياس الطيفي
+# مركز رفع الملفات المعملية - تم تخصيصه لملفات الإكسل فقط
 st.header("📥 رفع البيانات المعملية طيف الامتصاص")
-uploaded_file = st.file_uploader("الرجاء رفع ملف جهاز UV-Vis (Wavelength vs Absorbance):", type=["xlsx", "xls", "csv"])
+uploaded_file = st.file_uploader("الرجاء رفع ملف جهاز UV-Vis بصيغة إكسل فقط (Wavelength vs Absorbance):", type=["xlsx", "xls"])
 
 if uploaded_file is not None:
     try:
-        # قراءة الملف بمرونة عالية مع معالجة ذكية وحلول بديلة في حال غياب مكتبة openpyxl
-        if uploaded_file.name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file)
+        # نظام قراءة ذكي ومخصص لملفات الإكسل فقط وبناءً على الامتداد لحل مشاكل السيرفر
+        if uploaded_file.name.endswith('.xls'):
+            # استخدام محرك xlrd للملفات القديمة الناتجة من الأجهزة التقليدية
+            df = pd.read_excel(uploaded_file, engine='xlrd')
         else:
             try:
-                # المحاولة القياسية لقراءة الإكسل
+                # المحاولة القياسية لقراءة ملفات الإكسل الحديثة .xlsx
                 df = pd.read_excel(uploaded_file)
-            except Exception as e_excel:
-                # حل بديل فوري (Fallback) في حال واجه السيرفر السحابي مشكلة في مكتبة openpyxl
-                if "openpyxl" in str(e_excel).lower():
-                    # محاولة القراءة عبر المحرك الأساسي المدمج كخط دفاع ثانٍ
-                    df = pd.read_excel(uploaded_file, engine='xlrd')
-                else:
-                    raise e_excel
+            except Exception:
+                # خط دفاع بديل في حال حدوث تداخل في المحركات بالسيرفر السحابي
+                df = pd.read_excel(uploaded_file, engine='openpyxl')
             
-        # استخلاص الأعمدة تلقائياً بناءً على الترتيب الرقمي المعتمد للأجهزة
+        # استخلاص الأعمدة تلقائياً بناءً على الترتيب الرقمي المعتمد للأجهزة (العمود الأول طول موجي، الثاني امتصاصية)
         wavelength = pd.to_numeric(df.iloc[:, 0], errors='coerce').values
         absorbance = pd.to_numeric(df.iloc[:, 1], errors='coerce').values
         
@@ -60,7 +57,7 @@ if uploaded_file is not None:
         absorbance = absorbance[mask]
         
         if len(wavelength) == 0:
-            raise ValueError("الملف لا يحتوي على بيانات رقمية صالحة في العمودين الأول والثاني.")
+            raise ValueError("ملف الإكسل لا يحتوي على بيانات رقمية صالحة في العمودين الأول والثاني.")
             
         # الحسابات الفيزيائية الكمية (معادلة تاوك القياسية واشتقاق حافة الامتصاص)
         photon_energy = 1240.0 / wavelength
@@ -72,8 +69,8 @@ if uploaded_file is not None:
         measured_bg = round(1240.0 / wavelength[edge_idx], 2)
         measured_lambda = int(round(wavelength[edge_idx]))
         
-        # عرض نتائج الفحص المعملي الرقمي والمطابقة مع المراجع القياسية
-        st.success("✅ تم قراءة وتحليل بيانات طيف الامتصاص بنجاح!")
+        # عرض نتائج الفحص المعملي الرقمي والتشخيص التلقائي
+        st.success("✅ تم قراءة وتحليل بيانات ملف الإكسل بنجاح!")
         
         res_col1, res_col2 = st.columns(2)
         with res_col1:
@@ -93,7 +90,7 @@ if uploaded_file is not None:
             
         st.write("---")
         
-        # توليد المنحنيات البيانية التفاعلية (Interactive Native Charts) المقاومة لأخطاء السيرفرات
+        # توليد المنحنيات البيانية التفاعلية المستقرة تماماً على السيرفرات السحابية
         plot_col1, plot_col2 = st.columns(2)
         
         with plot_col1:
@@ -121,21 +118,21 @@ if uploaded_file is not None:
         st.dataframe(pd.DataFrame(rows), use_container_width=True)
             
     except Exception as e:
-        # واجهة تحذيرية منسقة للباحثين بديلة للأكواد التقنية الطويلة في حال رفع ملف بتنسيق خاطئ
+        # واجهة تحذيرية منسقة للباحثين بديلة للأكواد التقنية الطويلة
         st.error(f"""
-        ### ⚠️ خطأ في بنية البيانات المرفوعة (Data Format Error)
+        ### ⚠️ خطأ في بنية ملف الإكسل المرفوع (Excel Data Error)
         
-        عذراً دكتور، تعذر على النظام معالجة ملف الـ UV-Vis المرفوع بنجاح. يرجى مراجعة وتدقيق النقاط التالية:
+        عذراً دكتور، تعذر على النظام معالجة ملف الإكسل بنجاح. يرجى مراجعة وتدقيق النقاط التالية:
         
         * 📊 **ترتيب الأعمدة:** تأكد من أن **العمود الأول (A)** يحتوي على قيم الطول الموجي بالنانومتر ($Wavelength \ nm$)، وأن **العمود الثاني (B)** يحتوي على قيم الامتصاصية ($Absorbance$).
         * 🔢 **نوع البيانات:** يرجى التأكد من عدم وجود نصوص أو خلايا فارغة أو أسماء قراءات في الصفوف الأولى الخاصة بالبيانات الرقمية.
-        * 📄 **امتداد الملف:** يفضل استخدام صيغ الإكسل القياسية (`.xlsx`) أو ملفات القيم المفصولة بفواصل (`.csv`).
+        * 📄 **امتداد الملف المرفوع حالياً:** `{uploaded_file.name}`.
         
         ---
-        🔍 **تفاصيل الخطأ الفني الحالي:** `{str(e)}`
+        🔍 **تفاصيل الخطأ الفني المعالج تلقائياً:** `{str(e)}`
         """)
 else:
-    st.info("بانتظار رفع ملف جهاز الـ UV-Vis لرسم منحنى الامتصاص واستخراج مخطط تاوك وفجوة الطاقة فورا.")
+    st.info("بانتظار رفع ملف إكسل لجهاز الـ UV-Vis لرسم منحنى الامتصاص واستخراج مخطط تاوك وفجوة الطاقة فوراً.")
 
 # ---------------------------------------------------------
 # تذييل الصفحة المعتمد والثابت للدكتور مصطفى المسلماوي
