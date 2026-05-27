@@ -21,7 +21,7 @@ REFERENCE_UV_DATA = {
     "CuO (Cupric Oxide)": {"eg": 1.20, "lambda_max": 1033.0}
 }
 
-# شريط التحكم الجانبي للمعاملات الفيزيائية والميكانيكية للطيف
+# شريط التحكم الجانبي للمعاملات الفيزيائية
 st.sidebar.header("⚙️ إعدادات الحساب العلمي")
 transition_type = st.sidebar.selectbox(
     "اختر نوع الانتقال الإلكتروني (Transition Type):",
@@ -30,13 +30,12 @@ transition_type = st.sidebar.selectbox(
 
 exponent = 2.0 if "Direct" in transition_type else 0.5
 
-# مركز رفع الملفات المعملية - تم تخصيصه لملفات الإكسل المحددة فقط
+# مركز رفع الملفات المعملية
 st.header("📥 رفع البيانات المعملية طيف الامتصاص")
 uploaded_file = st.file_uploader("الرجاء رفع ملف جهاز UV-Vis بصيغة إكسل (Wavelength vs Absorbance):", type=["xlsx", "xls"])
 
 if uploaded_file is not None:
     try:
-        # قراءة آلية هجينة خالية تماماً من الاعتماد على المكتبات الخارجية لتفادي نقص السيرفر
         file_bytes = uploaded_file.read()
         try:
             df = pd.read_excel(io.BytesIO(file_bytes))
@@ -44,13 +43,9 @@ if uploaded_file is not None:
             try:
                 df = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl')
             except Exception:
-                try:
-                    df = pd.read_excel(io.BytesIO(file_bytes), engine='xlrd')
-                except Exception:
-                    html_data = pd.read_html(io.BytesIO(file_bytes))
-                    df = html_data[0]
+                df = pd.read_excel(io.BytesIO(file_bytes), engine='xlrd')
             
-        # تنظيف وفلترة الصفوف النصية الأولى (الترويسات التعريفية للأجهزة)
+        # تنظيف وفلترة الصفوف النصية الأولى (الترويسات المتقدمة للأجهزة)
         for i in range(min(len(df), 40)):
             v1 = pd.to_numeric(df.iloc[i:, 0], errors='coerce')
             v2 = pd.to_numeric(df.iloc[i:, 1], errors='coerce')
@@ -62,15 +57,15 @@ if uploaded_file is not None:
         col1 = pd.to_numeric(df.iloc[:, 0], errors='coerce').values
         col2 = pd.to_numeric(df.iloc[:, 1], errors='coerce').values
         
-        # استبعاد الخلايا الفارغة أو الشاذة رياضياً لقفل النطاقات
+        # استبعاد الخلايا الفارغة تماماً
         mask = ~np.isnan(col1) & ~np.isnan(col2) & ~np.isinf(col1) & ~np.isinf(col2)
         col1 = col1[mask]
         col2 = col2[mask]
         
         if len(col1) == 0:
-            raise ValueError("الملف المرفوع لا يحتوي على قراءات رقمية متناسقة في أول عمودين.")
+            raise ValueError("الملف المرفوع لا يحتوي على قراءات رقمية متناسقة.")
             
-        # خوارزمية التمييز الذكي للمحاور (تحديد أطوال النانومتر الكبيرة مقابل قراءات الامتصاصية الصغيرة)
+        # خوارزمية التمييز الذكي للمحاور بناءً على متوسط القيم المرفوعة
         if np.nanmean(col2) > np.nanmean(col1):
             wavelength = col2
             absorbance = col1
@@ -78,24 +73,24 @@ if uploaded_file is not None:
             wavelength = col1
             absorbance = col2
 
-        # الترتيب الهندسي التصاعدي للمنحنيات الطيفية
+        # الترتيب الهيكلي التصاعدي الدقيق لمنع التشابك الخطي
         sort_idx = np.argsort(wavelength)
         wavelength = wavelength[sort_idx]
         absorbance = absorbance[sort_idx]
 
-        # حصر النطاق الضوئي للـ UV-Vis وحماية المحور الشاقولي من التشتت والصفار
-        real_mask = (wavelength >= 250) & (wavelength <= 950) & (absorbance >= 0) & (absorbance <= 10)
+        # 🎯 التركيز الصارم على النطاق الحقيقي الصافي للتجارب المعملية (عزل الذيل الصهري والصفري)
+        real_mask = (wavelength >= 290) & (wavelength <= 900) & (absorbance >= -0.1) & (absorbance <= 8.0)
         wavelength = wavelength[real_mask]
         absorbance = absorbance[real_mask]
 
         if len(wavelength) == 0:
-            raise ValueError("النطاق الرقمي داخل الملف يقع خارج حدود القياس البصري المعتمد.")
+            raise ValueError("النطاق الرقمي بعد الفلترة الصافية فارغ تماماً.")
 
-        # الحسابات الفيزيائية الكمية (معادلة تاوك واشتقاق حافة الامتصاص الحرجة)
+        # الحسابات الفيزيائية لمخطط تاوك وفجوة الحزمة
         photon_energy = 1240.0 / wavelength
         tauc_y = (absorbance * photon_energy) ** exponent
         
-        # اشتقاق فجوة الحزمة البصرية تلقائياً
+        # اشتقاق فجوة الحزمة البصرية تلقائياً عبر المشتقة الأولى للامتصاصية
         diff_abs = np.diff(absorbance) / np.diff(wavelength)
         edge_idx = np.argmin(diff_abs) if len(diff_abs) > 0 else 0
         measured_bg = round(1240.0 / wavelength[edge_idx], 2)
@@ -121,17 +116,17 @@ if uploaded_file is not None:
             
         st.write("---")
         
-        # توليد الرسوم البيانية التفاعلية الثابتة والمحمية ذاتياً عبر محرك Area السحابي المدمج في ستريمليت
+        # توليد الرسوم الخطية التفاعلية النقية المستقرة آلياً ومباشرة بدون محركات خارجية
         plot_col1, plot_col2 = st.columns(2)
         
         with plot_col1:
             st.subheader("📊 طيف الامتصاصية التفاعلي (Absorbance Spectrum)")
-            # صياغة جدول مفرغ ومحاذاة الفهرس مباشرة على الطول الموجي لإجبار المحور الصادي على إظهار المنحنى
+            # بناء الهيكل الرقمي المباشر والصافي وإلزام المحور السيني بالبدء بدقة والانتهاء بدقة
             chart_data1 = pd.DataFrame({
                 'Absorbance (a.u.)': absorbance
             }, index=np.round(wavelength, 1))
-            st.area_chart(chart_data1, color='#FF5722')
-            st.caption(f"ℹ️ طيف الامتصاصية الفعلي مقاساً بدقة من {int(wavelength.min())} نانومتر إلى {int(wavelength.max())} نانومتر.")
+            st.line_chart(chart_data1, color='#FF5722')
+            st.caption(f"ℹ️ طيف الامتصاصية الفعلي مقاساً بدقة من {int(wavelength.min())} nm إلى {int(wavelength.max())} nm.")
             
         with plot_col2:
             st.subheader("📈 مخطط تاوك التفاعلي (Tauc Plot Method)")
@@ -139,7 +134,7 @@ if uploaded_file is not None:
             chart_data2 = pd.DataFrame({
                 y_label: tauc_y
             }, index=np.round(photon_energy, 2))
-            st.area_chart(chart_data2, color='#4CAF50')
+            st.line_chart(chart_data2, color='#4CAF50')
             st.caption(f"ℹ️ المنحنى البياني المتقاطع مع محور طاقة الفوتونات (eV) لتحديد قيمة الفجوة تلقائياً عند {measured_bg} eV.")
             
         # جدول استعراض مراجع الأجهزة المقارن في أسفل الشاشة
@@ -150,9 +145,7 @@ if uploaded_file is not None:
     except Exception as e:
         st.error(f"""
         ### ⚠️ تنبيه من بنية ملف جهاز الـ UV-Vis
-        
-        عذراً دكتور، تعذر استخراج الطيف. يرجى التأكد من أن الملف المرفوع هو ملف البيانات الرقمية الخام المستخرجة مباشرة من جهاز قياس الامتصاصية.
-        
+        عذراً دكتور، تعذر استخراج الطيف. يرجى التأكد من مطابقة خلايا البيانات.
         ---
         🔍 **تفاصيل المشكلة التقنية المعالجة:** `{str(e)}`
         """)
