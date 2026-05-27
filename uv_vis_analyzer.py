@@ -73,18 +73,18 @@ if uploaded_file is not None:
             wavelength = col1
             absorbance = col2
 
-        # 🎯 الخطوة السحرية: إجبار البيانات على الترتيب التصاعدي الصارم (من 300 إلى 800) لضمان دقة فهرسة المحور السيني للرسم
+        # إجبار البيانات على الترتيب التصاعدي الصارم لضمان دقة فهرسة المحور السيني للرسم
         sort_idx = np.argsort(wavelength)
         wavelength = wavelength[sort_idx]
         absorbance = absorbance[sort_idx]
 
-        # التركيز الصارم على النطاق الحقيقي الصافي للتجارب المعملية وعزل عيوب الجهاز
-        real_mask = (wavelength >= 290) & (wavelength <= 900) & (absorbance >= -0.1) & (absorbance <= 8.0)
+        # 🎯 تعديل دكتور مصطفى: التركيز الصارم على النطاق المطلوب من 200 إلى 800 نانومتر بالضبط
+        real_mask = (wavelength >= 200) & (wavelength <= 800) & (absorbance >= -0.5) & (absorbance <= 10.0)
         wavelength = wavelength[real_mask]
         absorbance = absorbance[real_mask]
 
         if len(wavelength) == 0:
-            raise ValueError("النطاق الرقمي بعد الفلترة الصافية فارغ تماماً.")
+            raise ValueError("الملف المرفوع لا يحتوي على قراءات تقع في النطاق المحدد (200 - 800 nm).")
 
         # الحسابات الفيزيائية لمخطط تاوك وفجوة الحزمة
         photon_energy = 1240.0 / wavelength
@@ -97,7 +97,7 @@ if uploaded_file is not None:
         measured_lambda = int(round(wavelength[edge_idx]))
         
         # عرض واجهة النتائج والتحليل التشخيصي المباشر
-        st.success("✅ تم معالجة وترتيب فهارس المحاور وعرض المخططات بنجاح!")
+        st.success("✅ تم الفحص الرياضي وتعديل النطاق الطيفي بنجاح!")
         
         res_col1, res_col2 = st.columns(2)
         with res_col1:
@@ -121,12 +121,11 @@ if uploaded_file is not None:
         
         with plot_col1:
             st.subheader("📊 طيف الامتصاصية التفاعلي (Absorbance Spectrum)")
-            # بناء هيكل مستقل تماماً يعتمد على الطول الموجي المرتب كعمود منفصل ومحور أساسي
             chart_data1 = pd.DataFrame({
                 'Wavelength': wavelength,
                 'Absorbance': absorbance
             })
-            # تحديد المحاور يدوياً وبدقة لمنع الاختفاء الفهرسي لـ Streamlit
+            # رسم خطي مقيد بدقة بين 200 و 800 نانومتر
             st.line_chart(chart_data1.set_index('Wavelength'), color='#FF5722')
             st.caption(f"ℹ️ طيف الامتصاصية الفعلي مقاساً بدقة من {int(wavelength.min())} nm إلى {int(wavelength.max())} nm.")
             
