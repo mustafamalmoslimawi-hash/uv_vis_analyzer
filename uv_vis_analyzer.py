@@ -20,7 +20,7 @@ REFERENCE_UV_DATA = {
     "CuO (Cupric Oxide)": {"eg": 1.20, "lambda_max": 1033.0}
 }
 
-# شريط التحكم الجانبي للمعاملات الفيزيائية
+# شريط التحكم الجانبي للمعاملات الفيزيائية والميكانيكية للطيف
 st.sidebar.header("⚙️ إعدادات الحساب العلمي")
 transition_type = st.sidebar.selectbox(
     "اختر نوع الانتقال الإلكتروني (Transition Type):",
@@ -29,23 +29,26 @@ transition_type = st.sidebar.selectbox(
 
 exponent = 2.0 if "Direct" in transition_type else 0.5
 
-# مركز رفع الملفات المعملية - تم تخصيصه لملفات الإكسل فقط
+# مركز رفع الملفات المعملية - تم تخصيصه لملفات الإكسل المحددة فقط
 st.header("📥 رفع البيانات المعملية طيف الامتصاص")
 uploaded_file = st.file_uploader("الرجاء رفع ملف جهاز UV-Vis بصيغة إكسل فقط (Wavelength vs Absorbance):", type=["xlsx", "xls"])
 
 if uploaded_file is not None:
     try:
-        # نظام قراءة ذكي ومخصص لملفات الإكسل فقط وبناءً على الامتداد لحل مشاكل السيرفر
+        # قراءة ذكية لملفات إكسل مع تفعيل نظام الحلول البديلة للمحركات تلافياً لأي نقص بالسيرفر
         if uploaded_file.name.endswith('.xls'):
-            # استخدام محرك xlrd للملفات القديمة الناتجة من الأجهزة التقليدية
-            df = pd.read_excel(uploaded_file, engine='xlrd')
+            try:
+                df = pd.read_excel(uploaded_file, engine='xlrd')
+            except Exception:
+                df = pd.read_excel(uploaded_file)
         else:
             try:
-                # المحاولة القياسية لقراءة ملفات الإكسل الحديثة .xlsx
-                df = pd.read_excel(uploaded_file)
-            except Exception:
-                # خط دفاع بديل في حال حدوث تداخل في المحركات بالسيرفر السحابي
                 df = pd.read_excel(uploaded_file, engine='openpyxl')
+            except Exception:
+                try:
+                    df = pd.read_excel(uploaded_file, engine='xlrd')
+                except Exception:
+                    df = pd.read_excel(uploaded_file)
             
         # استخلاص الأعمدة تلقائياً بناءً على الترتيب الرقمي المعتمد للأجهزة (العمود الأول طول موجي، الثاني امتصاصية)
         wavelength = pd.to_numeric(df.iloc[:, 0], errors='coerce').values
