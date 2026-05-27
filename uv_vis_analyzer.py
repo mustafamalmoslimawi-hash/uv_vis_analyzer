@@ -47,7 +47,7 @@ if uploaded_file is not None:
                 df = pd.read_excel(io.BytesIO(file_bytes), engine='xlrd')
 
         # تنظيف البيانات الأولية: تخطي الصفوف النصية والترويسات التي تضعها بعض الأجهزة
-        for i in range(min(len(df), 30)):
+        for i in range(min(len(df), 40)):
             val1 = pd.to_numeric(df.iloc[i:, 0], errors='coerce')
             val2 = pd.to_numeric(df.iloc[i:, 1], errors='coerce')
             if val1.notna().sum() > 5 and val2.notna().sum() > 5:
@@ -58,7 +58,7 @@ if uploaded_file is not None:
         col1_values = pd.to_numeric(df.iloc[:, 0], errors='coerce').values
         col2_values = pd.to_numeric(df.iloc[:, 1], errors='coerce').values
 
-        # تصفية شاملة وحاسمة من القيم الفارغة أو اللانهائية
+        # تصفية شاملة وحاسمة من القيم الفارغة أو غير المعرفة
         valid_mask = ~np.isnan(col1_values) & ~np.isnan(col2_values) & ~np.isinf(col1_values) & ~np.isinf(col2_values)
         col1_values = col1_values[valid_mask]
         col2_values = col2_values[valid_mask]
@@ -66,7 +66,7 @@ if uploaded_file is not None:
         if len(col1_values) == 0:
             raise ValueError("الملف لا يحتوي على بيانات رقمية واضحة وصالحة في العمودين الأول والثاني.")
 
-        # خوارزمية الكشف التلقائي عن الأعمدة وتصحيح الترتيب المقلوب للأجهزة
+        # خوارزمية الكشف التلقائي عن الأعمدة وتصحيح التترتيب المقلوب للأجهزة
         if np.nanmean(col2_values) > np.nanmean(col1_values):
             wavelength = col2_values
             absorbance = col1_values
@@ -79,8 +79,8 @@ if uploaded_file is not None:
         wavelength = wavelength[sort_idx]
         absorbance = absorbance[sort_idx]
 
-        # عزل أي قراءات شاذة أو أطوال موجية صفرية أو سالبة
-        real_mask = (wavelength >= 200) & (wavelength <= 1200) & (absorbance >= -0.5)
+        # عزل أي قراءات شاذة وحصر النطاق الفعلي للامتصاصية
+        real_mask = (wavelength >= 200) & (wavelength <= 1200)
         wavelength = wavelength[real_mask]
         absorbance = absorbance[real_mask]
 
@@ -98,7 +98,7 @@ if uploaded_file is not None:
         measured_lambda = int(round(wavelength[edge_idx]))
         
         # عرض واجهة النتائج المعتمدة
-        st.success("✅ تم تحليل وضبط منحنى طيف الامتصاص بنجاح وإظهار البيانات!")
+        st.success("✅ تم معالجة وتحليل طيف الامتصاص بنجاح!")
         
         res_col1, res_col2 = st.columns(2)
         with res_col1:
@@ -117,30 +117,36 @@ if uploaded_file is not None:
             
         st.write("---")
         
-        # بناء المنحنيات البيانية التفاعلية مع حماية المحاور هندسياً لمنع الاختفاء
+        # بناء المنحنيات البيانية التفاعلية باستخدام محرك المخططات المتطور والقوي Plotly لمنع أي اختفاء
+        import plotly.express as px
+        
         plot_col1, plot_col2 = st.columns(2)
         
         with plot_col1:
             st.subheader("📊 طيف الامتصاصية التفاعلي (Absorbance Spectrum)")
-            # بناء DataFrame صافي كلياً ومفهرس بالطول الموجي لإجبار المحور الصادي على التموضع الصحيح
-            chart_data1 = pd.DataFrame({
+            clean_df1 = pd.DataFrame({
+                'Wavelength (nm)': wavelength,
                 'Absorbance (a.u.)': absorbance
-            }, index=np.round(wavelength, 1))
-            
-            # رسم المخطط التفاعلي المستقر
-            st.line_chart(chart_data1, y='Absorbance (a.u.)', color='#FF5722')
+            })
+            # إنشاء مخطط خطي محمي ذاتياً عبر Plotly
+            fig1 = px.line(clean_df1, x='Wavelength (nm)', y='Absorbance (a.u.)', template="plotly_white")
+            fig1.update_traces(line_color='#FF5722', line_width=3)
+            fig1.update_layout(hovermode="x unified")
+            st.plotly_chart(fig1, use_container_width=True)
             st.caption(f"ℹ️ المنحنى الطيفي للامتصاصية الفعلي مقاساً بين {int(wavelength.min())} و {int(wavelength.max())} نانومتر.")
             
         with plot_col2:
             st.subheader("📈 مخطط تاوك التفاعلي (Tauc Plot Method)")
             y_label = '(Alpha*hnu)^2' if exponent == 2.0 else '(Alpha*hnu)^0.5'
-            # بناء DataFrame مستقل ومفهرس بطاقة الفوتون
-            chart_data2 = pd.DataFrame({
+            clean_df2 = pd.DataFrame({
+                'Photon Energy (eV)': photon_energy,
                 y_label: tauc_y
-            }, index=np.round(photon_energy, 3))
-            
-            # رسم مخطط تاوك التفاعلي المستقر
-            st.line_chart(chart_data2, y=y_label, color='#4CAF50')
+            })
+            # إنشاء مخطط تاوك المحمي ذاتياً عبر Plotly
+            fig2 = px.line(clean_df2, x='Photon Energy (eV)', y=y_label, template="plotly_white")
+            fig2.update_traces(line_color='#4CAF50', line_width=3)
+            fig2.update_layout(hovermode="x unified")
+            st.plotly_chart(fig2, use_container_width=True)
             st.caption(f"ℹ️ تقاطع المماس الخطي مع محور الطاقة يحدد فجوة الحزمة عند: {measured_bg} eV.")
             
         # جدول استعراض مراجع الأجهزة المقارن
