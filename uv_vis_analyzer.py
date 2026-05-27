@@ -4,10 +4,10 @@ import numpy as np
 import io
 
 # إعدادات الواجهة المستقلة والذكية لموقع الـ UV-Vis
-st.set_page_config(page_title="UV-Vis Optical Band Gap Analyzer", layout="wide")
+st.set_page_config(page_title="UV-Vis Spectroscopic Analyzer", layout="wide")
 
-st.markdown("<h1 style='text-align: center; color: #FF5722;'>UV-Vis Spectroscopic & Band Gap Analyzer</h1>", unsafe_allow_html=True)
-st.markdown("<h4 style='text-align: center; color: #555;'>AUTOMATED OPTICAL CHARACTERIZATION & TAUC PLOT DIAGNOSIS</h4>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #FF5722;'>UV-Vis Spectroscopic Analyzer</h1>", unsafe_allow_html=True)
+st.markdown("<h4 style='text-align: center; color: #555;'>AUTOMATED OPTICAL CHARACTERIZATION & ABSORBANCE SPECTRUM PLOT</h4>", unsafe_allow_html=True)
 st.write("---")
 
 # قاعدة البيانات المرجعية القياسية المدمجة للتشخيص التلقائي الفوري
@@ -20,15 +20,6 @@ REFERENCE_UV_DATA = {
     "CoFe2O4 (Cobalt Ferrite)": {"eg": 2.00, "lambda_max": 620.0},
     "CuO (Cupric Oxide)": {"eg": 1.20, "lambda_max": 1033.0}
 }
-
-# شريط التحكم الجانبي للمعاملات الفيزيائية
-st.sidebar.header("⚙️ إعدادات الحساب العلمي")
-transition_type = st.sidebar.selectbox(
-    "اختر نوع الانتقال الإلكتروني (Transition Type):",
-    ["Direct Transition (n=1/2)", "Indirect Transition (n=2)"]
-)
-
-exponent = 2.0 if "Direct" in transition_type else 0.5
 
 # مركز رفع الملفات المعملية
 st.header("📥 رفع البيانات المعملية طيف الامتصاص")
@@ -53,7 +44,7 @@ if uploaded_file is not None:
                 df = df.iloc[i:].reset_index(drop=True)
                 break
 
-        # استخلاص المصفوفات الرقمية النقية
+        # 1. استخلاص المصفوفات الرقمية النقية
         col1 = pd.to_numeric(df.iloc[:, 0], errors='coerce').values
         col2 = pd.to_numeric(df.iloc[:, 1], errors='coerce').values
         
@@ -65,7 +56,7 @@ if uploaded_file is not None:
         if len(col1) == 0:
             raise ValueError("الملف المرفوع لا يحتوي على قراءات رقمية متناسقة.")
             
-        # خوارزمية التمييز الذكي للمحاور بناءً على متوسط القيم المرفوعة
+        # 2. خوارزمية التمييز الذكي للمحاور (تحديد عمود الطول الموجي مقابل عمود الامتصاصية)
         if np.nanmean(col2) > np.nanmean(col1):
             wavelength = col2
             absorbance = col1
@@ -73,12 +64,12 @@ if uploaded_file is not None:
             wavelength = col1
             absorbance = col2
 
-        # الترتيب الهيكلي التصاعدي الدقيق لمنع التشابك الخطي
+        # الترتيب الهيكلي التصاعدي الدقيق لمنع التشابك الخطي للمنحنى
         sort_idx = np.argsort(wavelength)
         wavelength = wavelength[sort_idx]
         absorbance = absorbance[sort_idx]
 
-        # 🎯 التركيز الصارم على النطاق الحقيقي الصافي للتجارب المعملية (عزل الذيل الصهري والصفري)
+        # 3. التركيز الصارم على النطاق الحقيقي الصافي للعينات (عزل التشتت الصفري الميت للملف)
         real_mask = (wavelength >= 290) & (wavelength <= 900) & (absorbance >= -0.1) & (absorbance <= 8.0)
         wavelength = wavelength[real_mask]
         absorbance = absorbance[real_mask]
@@ -86,23 +77,19 @@ if uploaded_file is not None:
         if len(wavelength) == 0:
             raise ValueError("النطاق الرقمي بعد الفلترة الصافية فارغ تماماً.")
 
-        # الحسابات الفيزيائية لمخطط تاوك وفجوة الحزمة
-        photon_energy = 1240.0 / wavelength
-        tauc_y = (absorbance * photon_energy) ** exponent
-        
-        # اشتقاق فجوة الحزمة البصرية تلقائياً عبر المشتقة الأولى للامتصاصية
+        # الحسابات الفيزيائية لحافة الامتصاص وفجوة الحزمة التلقائية
         diff_abs = np.diff(absorbance) / np.diff(wavelength)
         edge_idx = np.argmin(diff_abs) if len(diff_abs) > 0 else 0
         measured_bg = round(1240.0 / wavelength[edge_idx], 2)
         measured_lambda = int(round(wavelength[edge_idx]))
         
         # عرض واجهة النتائج والتحليل التشخيصي المباشر
-        st.success("✅ تم الفحص الرياضي الشامل وإعداد المنحنيات البيانية بنجاح!")
+        st.success("✅ تم الفحص الرياضي الشامل ورسم المنحنى بنجاح!")
         
         res_col1, res_col2 = st.columns(2)
         with res_col1:
-            st.metric(label="💡 فجوة الطاقة البصرية المقاسة (Measured Eg):", value=f"{measured_bg} eV")
-            st.metric(label="🎯 حافة الامتصاص القياسية (Absorption Edge):", value=f"{measured_lambda} nm")
+            st.metric(label="🎯 حافة الامتصاص المحسوبة (Absorption Edge):", value=f"{measured_lambda} nm")
+            st.metric(label="💡 فجوة الطاقة البصرية التقريبية (Estimated Eg):", value=f"{measured_bg} eV")
             
         with res_col2:
             matched_material = "Custom / Doped Material (مادة معدلة أو مشوبة)"
@@ -116,26 +103,19 @@ if uploaded_file is not None:
             
         st.write("---")
         
-        # توليد الرسوم الخطية التفاعلية النقية المستقرة آلياً ومباشرة بدون محركات خارجية
-        plot_col1, plot_col2 = st.columns(2)
+        # 4. رسم منحنى طيف الامتصاصية فقط ممتداً على كامل عرض الشاشة (سينات وصادات)
+        st.subheader("📊 طيف الامتصاصية التفاعلي (Absorbance Spectrum)")
         
-        with plot_col1:
-            st.subheader("📊 طيف الامتصاصية التفاعلي (Absorbance Spectrum)")
-            # بناء الهيكل الرقمي المباشر والصافي وإلزام المحور السيني بالبدء بدقة والانتهاء بدقة
-            chart_data1 = pd.DataFrame({
-                'Absorbance (a.u.)': absorbance
-            }, index=np.round(wavelength, 1))
-            st.line_chart(chart_data1, color='#FF5722')
-            st.caption(f"ℹ️ طيف الامتصاصية الفعلي مقاساً بدقة من {int(wavelength.min())} nm إلى {int(wavelength.max())} nm.")
-            
-        with plot_col2:
-            st.subheader("📈 مخطط تاوك التفاعلي (Tauc Plot Method)")
-            y_label = 'Tauc Value (Alpha*hnu)^n'
-            chart_data2 = pd.DataFrame({
-                y_label: tauc_y
-            }, index=np.round(photon_energy, 2))
-            st.line_chart(chart_data2, color='#4CAF50')
-            st.caption(f"ℹ️ المنحنى البياني المتقاطع مع محور طاقة الفوتونات (eV) لتحديد قيمة الفجوة تلقائياً عند {measured_bg} eV.")
+        # بناء جدول البيانات بربط الامتصاصية مباشرة مع فهرس الأطوال الموجية المعملية
+        chart_data = pd.DataFrame({
+            'Absorbance (a.u.)': absorbance
+        }, index=np.round(wavelength, 1))
+        
+        # رسم خطي صافي نقي ومحمي عبر دالة Streamlit الأساسية المستقرة
+        st.line_chart(chart_data, color='#FF5722')
+        
+        st.caption(f"ℹ️ المحور الأفقي (السينات): الطول الموجي Wavelength (nm) | المحور الشاقولي (الصادات): الامتصاصية Absorbance (a.u.) مقاساً بدقة من {int(wavelength.min())} nm إلى {int(wavelength.max())} nm.")
+        st.write("---")
             
         # جدول استعراض مراجع الأجهزة المقارن في أسفل الشاشة
         st.write("### 📋 جدول المراجع القياسية لفجوات الطاقة واللامدا ماكس (UV-Vis Reference Database)")
@@ -145,12 +125,12 @@ if uploaded_file is not None:
     except Exception as e:
         st.error(f"""
         ### ⚠️ تنبيه من بنية ملف جهاز الـ UV-Vis
-        عذراً دكتور، تعذر استخراج الطيف. يرجى التأكد من مطابقة خلايا البيانات.
+        عذراً دكتور، تعذر استخراج الطيف. يرجى التأكد من مطابقة خلايا البيانات الرقمية داخل ملف الإكسل.
         ---
         🔍 **تفاصيل المشكلة التقنية المعالجة:** `{str(e)}`
         """)
 else:
-    st.info("بانتظار رفع ملف إكسل لجهاز الـ UV-Vis لرسم منحنى الامتصاص واستخراج مخطط تاوك وفجوة الطاقة فوراً.")
+    st.info("بانتظار رفع ملف إكسل لجهاز الـ UV-Vis لرسم منحنى طيف الامتصاص فوراً.")
 
 # ---------------------------------------------------------
 # تذييل الصفحة المعتمد والثابت للدكتور مصطفى المسلماوي
