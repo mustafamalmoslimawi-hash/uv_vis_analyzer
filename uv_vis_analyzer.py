@@ -57,7 +57,7 @@ if uploaded_file is not None:
         col1 = pd.to_numeric(df.iloc[:, 0], errors='coerce').values
         col2 = pd.to_numeric(df.iloc[:, 1], errors='coerce').values
         
-        # استبعاد الخلايا الفارغة تماماً
+        # استبعاد الخلايا الفارغة تماماً أو القيم اللانهائية
         mask = ~np.isnan(col1) & ~np.isnan(col2) & ~np.isinf(col1) & ~np.isinf(col2)
         col1 = col1[mask]
         col2 = col2[mask]
@@ -73,12 +73,12 @@ if uploaded_file is not None:
             wavelength = col1
             absorbance = col2
 
-        # الترتيب الهيكلي التصاعدي الدقيق لمنع التشابك الخطي
+        # 🎯 الخطوة السحرية: إجبار البيانات على الترتيب التصاعدي الصارم (من 300 إلى 800) لضمان دقة فهرسة المحور السيني للرسم
         sort_idx = np.argsort(wavelength)
         wavelength = wavelength[sort_idx]
         absorbance = absorbance[sort_idx]
 
-        # التركيز الصارم على النطاق الحقيقي الصافي للتجارب المعملية وعزل العيوب
+        # التركيز الصارم على النطاق الحقيقي الصافي للتجارب المعملية وعزل عيوب الجهاز
         real_mask = (wavelength >= 290) & (wavelength <= 900) & (absorbance >= -0.1) & (absorbance <= 8.0)
         wavelength = wavelength[real_mask]
         absorbance = absorbance[real_mask]
@@ -97,7 +97,7 @@ if uploaded_file is not None:
         measured_lambda = int(round(wavelength[edge_idx]))
         
         # عرض واجهة النتائج والتحليل التشخيصي المباشر
-        st.success("✅ تم استرجاع وفحص كافة المخططات الفيزيائية بنجاح!")
+        st.success("✅ تم معالجة وترتيب فهارس المحاور وعرض المخططات بنجاح!")
         
         res_col1, res_col2 = st.columns(2)
         with res_col1:
@@ -121,19 +121,22 @@ if uploaded_file is not None:
         
         with plot_col1:
             st.subheader("📊 طيف الامتصاصية التفاعلي (Absorbance Spectrum)")
+            # بناء هيكل مستقل تماماً يعتمد على الطول الموجي المرتب كعمود منفصل ومحور أساسي
             chart_data1 = pd.DataFrame({
-                'Absorbance (a.u.)': absorbance
-            }, index=np.round(wavelength, 1))
-            st.line_chart(chart_data1, color='#FF5722')
+                'Wavelength': wavelength,
+                'Absorbance': absorbance
+            })
+            # تحديد المحاور يدوياً وبدقة لمنع الاختفاء الفهرسي لـ Streamlit
+            st.line_chart(chart_data1.set_index('Wavelength'), color='#FF5722')
             st.caption(f"ℹ️ طيف الامتصاصية الفعلي مقاساً بدقة من {int(wavelength.min())} nm إلى {int(wavelength.max())} nm.")
             
         with plot_col2:
-            st.subheader("📈 مخطط تاوك المسترجع (Tauc Plot Method)")
-            y_label = 'Tauc Value (Alpha*hnu)^n'
+            st.subheader("📈 مخطط تاوك المسترجَع (Tauc Plot Method)")
             chart_data2 = pd.DataFrame({
-                y_label: tauc_y
-            }, index=np.round(photon_energy, 2))
-            st.line_chart(chart_data2, color='#4CAF50')
+                'Photon Energy': photon_energy,
+                'Tauc Value': tauc_y
+            })
+            st.line_chart(chart_data2.set_index('Photon Energy'), color='#4CAF50')
             st.caption(f"ℹ️ المنحنى البياني المتقاطع مع محور طاقة الفوتونات (eV) لتحديد قيمة الفجوة تلقائياً عند {measured_bg} eV.")
             
         # جدول استعراض مراجع الأجهزة المقارن في أسفل الشاشة
