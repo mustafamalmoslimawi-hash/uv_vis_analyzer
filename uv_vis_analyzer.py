@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-# إعدادات الواجهة المستقلة المتقدمة لموقع الـ UV-Vis
+# إعدادات الواجهة المستقلة والذكية لموقع الـ UV-Vis
 st.set_page_config(page_title="UV-Vis Optical Band Gap Analyzer", layout="wide")
 
 st.markdown("<h1 style='text-align: center; color: #FF5722;'>UV-Vis Spectroscopic & Band Gap Analyzer</h1>", unsafe_allow_html=True)
@@ -20,7 +20,7 @@ REFERENCE_UV_DATA = {
     "CuO (Cupric Oxide)": {"eg": 1.20, "lambda_max": 1033.0}
 }
 
-# شريط التحكم الجانبي للمعاملات الفيزيائية والميكانيكية للطيف
+# شريط التحكم الجانبي للمعاملات الفيزيائية
 st.sidebar.header("⚙️ إعدادات الحساب العلمي")
 transition_type = st.sidebar.selectbox(
     "اختر نوع الانتقال الإلكتروني (Transition Type):",
@@ -35,11 +35,20 @@ uploaded_file = st.file_uploader("الرجاء رفع ملف جهاز UV-Vis (Wa
 
 if uploaded_file is not None:
     try:
-        # قراءة الملف بمرونة عالية حسب الامتداد المرفوع من قبل الباحث
+        # قراءة الملف بمرونة عالية مع معالجة ذكية وحلول بديلة في حال غياب مكتبة openpyxl
         if uploaded_file.name.endswith('.csv'):
             df = pd.read_csv(uploaded_file)
         else:
-            df = pd.read_excel(uploaded_file)
+            try:
+                # المحاولة القياسية لقراءة الإكسل
+                df = pd.read_excel(uploaded_file)
+            except Exception as e_excel:
+                # حل بديل فوري (Fallback) في حال واجه السيرفر السحابي مشكلة في مكتبة openpyxl
+                if "openpyxl" in str(e_excel).lower():
+                    # محاولة القراءة عبر المحرك الأساسي المدمج كخط دفاع ثانٍ
+                    df = pd.read_excel(uploaded_file, engine='xlrd')
+                else:
+                    raise e_excel
             
         # استخلاص الأعمدة تلقائياً بناءً على الترتيب الرقمي المعتمد للأجهزة
         wavelength = pd.to_numeric(df.iloc[:, 0], errors='coerce').values
@@ -63,7 +72,7 @@ if uploaded_file is not None:
         measured_bg = round(1240.0 / wavelength[edge_idx], 2)
         measured_lambda = int(round(wavelength[edge_idx]))
         
-        # عرض نتائج الفحص المعملي الرقمي والذكاء الاصطناعي للمطابقة
+        # عرض نتائج الفحص المعملي الرقمي والمطابقة مع المراجع القياسية
         st.success("✅ تم قراءة وتحليل بيانات طيف الامتصاص بنجاح!")
         
         res_col1, res_col2 = st.columns(2)
@@ -72,12 +81,12 @@ if uploaded_file is not None:
             st.metric(label="🎯 قمة الامتصاص المقاسة (Measured Lambda Max):", value=f"{measured_lambda} nm")
             
         with res_col2:
-            # مطابقة ذكية وتلقائية مع المواد القياسية في قاعدة البيانات المرجعية للـ UV-Vis
+            # مطابقة تلقائية مع المواد القياسية في قاعدة البيانات المرجعية للـ UV-Vis
             matched_material = "Custom / Doped Material (مادة معدلة أو مشوبة)"
             min_diff = 999.0
             for mat, data in REFERENCE_UV_DATA.items():
                 diff = abs(data["eg"] - measured_bg)
-                if diff < min_diff and diff <= 0.35:  # حدود سماحية الخطأ المعملي والتشويش المقبولة علمياً
+                if diff < min_diff and diff <= 0.35:  # حدود سماحية الخطأ المعملي المقبولة علمياً
                     min_diff = diff
                     matched_material = mat
             st.info(f"🔍 المادة القياسية الأقرب للتطابق بناءً على المراجع: \n\n **{matched_material}**")
@@ -98,7 +107,6 @@ if uploaded_file is not None:
             
         with plot_col2:
             st.subheader("📈 مخطط تاوك التفاعلي (Tauc Plot Method)")
-            
             y_label = '(Alpha*hnu)^2' if exponent == 2.0 else '(Alpha*hnu)^0.5'
             chart_data2 = pd.DataFrame({
                 'Photon Energy (eV)': photon_energy,
@@ -113,18 +121,18 @@ if uploaded_file is not None:
         st.dataframe(pd.DataFrame(rows), use_container_width=True)
             
     except Exception as e:
-        # واجهة تحذيرية ذكية تمنع ظهور الـ Traceback التقني المعقد أمام الباحثين والطلاب
+        # واجهة تحذيرية منسقة للباحثين بديلة للأكواد التقنية الطويلة في حال رفع ملف بتنسيق خاطئ
         st.error(f"""
         ### ⚠️ خطأ في بنية البيانات المرفوعة (Data Format Error)
         
         عذراً دكتور، تعذر على النظام معالجة ملف الـ UV-Vis المرفوع بنجاح. يرجى مراجعة وتدقيق النقاط التالية:
         
         * 📊 **ترتيب الأعمدة:** تأكد من أن **العمود الأول (A)** يحتوي على قيم الطول الموجي بالنانومتر ($Wavelength \ nm$)، وأن **العمود الثاني (B)** يحتوي على قيم الامتصاصية ($Absorbance$).
-        * 🔢 **نوع البيانات:** يرجى التأكد من عدم وجود نصوص أو خلايا فارغة أو أسماء قراءات في الصفوف الأولى الخاصة بالبيانات الرقمية لجهاز الفحص.
+        * 🔢 **نوع البيانات:** يرجى التأكد من عدم وجود نصوص أو خلايا فارغة أو أسماء قراءات في الصفوف الأولى الخاصة بالبيانات الرقمية.
         * 📄 **امتداد الملف:** يفضل استخدام صيغ الإكسل القياسية (`.xlsx`) أو ملفات القيم المفصولة بفواصل (`.csv`).
         
         ---
-        🔍 **تفاصيل الخطأ الفني:** `{str(e)}`
+        🔍 **تفاصيل الخطأ الفني الحالي:** `{str(e)}`
         """)
 else:
     st.info("بانتظار رفع ملف جهاز الـ UV-Vis لرسم منحنى الامتصاص واستخراج مخطط تاوك وفجوة الطاقة فورا.")
