@@ -46,9 +46,8 @@ if uploaded_file is not None:
             except Exception:
                 df = pd.read_excel(io.BytesIO(file_bytes), engine='xlrd')
 
-        # تنظيف البيانات الأولية: إزالة الصفوف النصية والترويسات التي تضعها بعض الأجهزة
-        # نقوم بالبحث عن أول صف يحتوي على قراءات رقمية حقيقية
-        for i in range(min(len(df), 20)):
+        # تنظيف البيانات الأولية: تخطي الصفوف النصية والترويسات التي تضعها بعض الأجهزة
+        for i in range(min(len(df), 30)):
             val1 = pd.to_numeric(df.iloc[i:, 0], errors='coerce')
             val2 = pd.to_numeric(df.iloc[i:, 1], errors='coerce')
             if val1.notna().sum() > 5 and val2.notna().sum() > 5:
@@ -59,38 +58,34 @@ if uploaded_file is not None:
         col1_values = pd.to_numeric(df.iloc[:, 0], errors='coerce').values
         col2_values = pd.to_numeric(df.iloc[:, 1], errors='coerce').values
 
-        # تصفية من القيم الفارغة (NaN)
-        valid_mask = ~np.isnan(col1_values) & ~np.isnan(col2_values)
+        # تصفية شاملة وحاسمة من القيم الفارغة أو اللانهائية
+        valid_mask = ~np.isnan(col1_values) & ~np.isnan(col2_values) & ~np.isinf(col1_values) & ~np.isinf(col2_values)
         col1_values = col1_values[valid_mask]
         col2_values = col2_values[valid_mask]
 
         if len(col1_values) == 0:
-            raise ValueError("الملف لا يحتوي على بيانات رقمية واضحة في العمودين الأول والثاني.")
+            raise ValueError("الملف لا يحتوي على بيانات رقمية واضحة وصالحة في العمودين الأول والثاني.")
 
-        # 🧠 خوارزمية الكشف التلقائي عن الأعمدة وتصحيح الترتيب المقلوب للأجهزة:
-        # أطوال موجات الـ UV-Vis تقع عادةً في نطاق مئوي (مثال: 200 إلى 1000)، بينما الامتصاصية قيم صغيرة (غالباً بين 0 و 5).
+        # خوارزمية الكشف التلقائي عن الأعمدة وتصحيح الترتيب المقلوب للأجهزة
         if np.nanmean(col2_values) > np.nanmean(col1_values):
-            # إذا كانت قيم العمود الثاني أكبر، فهذا يعني أن العمود الثاني هو الطول الموجي والأول هو الامتصاصية!
             wavelength = col2_values
             absorbance = col1_values
-            st.warning("⚠️ تنبيه ذكي: تم رصد ترتيب مقلوب للملف من الجهاز، وقام النظام بتعديل الأعمدة تلقائياً لضمان دقة الحسابات.")
         else:
-            # الترتيب القياسي الصحيح
             wavelength = col1_values
             absorbance = col2_values
 
-        # التأكد من الترتيب التصاعدي للأطوال الموجية لرسم بياني هندسي مستقر
+        # التأكد من الترتيب التصاعدي للأطوال الموجية لضمان استقرار الرسم البياني هندسياً
         sort_idx = np.argsort(wavelength)
         wavelength = wavelength[sort_idx]
         absorbance = absorbance[sort_idx]
 
-        # عزل أي قراءات شاذة أو أطوال موجية صفرية أو سالبة لتجنب قسمة الصفر رياضياً
-        real_mask = (wavelength > 100) & (wavelength < 2000) & (absorbance >= 0)
+        # عزل أي قراءات شاذة أو أطوال موجية صفرية أو سالبة
+        real_mask = (wavelength >= 200) & (wavelength <= 1200) & (absorbance >= -0.5)
         wavelength = wavelength[real_mask]
         absorbance = absorbance[real_mask]
 
         if len(wavelength) == 0:
-            raise ValueError("نطاق الأطوال الموجية في ملف الإكسل يقع خارج النطاق الطيفي المعتمد للـ UV-Vis (200-1100 nm).")
+            raise ValueError("نطاق الأطوال الموجية في ملف الإكسل يقع خارج النطاق الطيفي المعتمد للـ UV-Vis (200-1200 nm).")
 
         # الحسابات الفيزيائية الكمية لثوابت تاوك (Tauc Plot Calculations)
         photon_energy = 1240.0 / wavelength
@@ -122,27 +117,30 @@ if uploaded_file is not None:
             
         st.write("---")
         
-        # بناء المنحنيات البيانية التفاعلية المحددة بالنطاق الدقيق للأجهزة البصرية
+        # بناء المنحنيات البيانية التفاعلية مع حماية المحاور هندسياً لمنع الاختفاء
         plot_col1, plot_col2 = st.columns(2)
         
         with plot_col1:
             st.subheader("📊 طيف الامتصاصية التفاعلي (Absorbance Spectrum)")
+            # بناء DataFrame صافي كلياً ومفهرس بالطول الموجي لإجبار المحور الصادي على التموضع الصحيح
             chart_data1 = pd.DataFrame({
-                'Wavelength (nm)': wavelength,
                 'Absorbance (a.u.)': absorbance
-            })
-            # قفل المحور السيناتي بدقة على أرقام النانو متر الحقيقية للملف
-            st.line_chart(chart_data1.set_index('Wavelength (nm)'), color='#FF5722')
+            }, index=np.round(wavelength, 1))
+            
+            # رسم المخطط التفاعلي المستقر
+            st.line_chart(chart_data1, y='Absorbance (a.u.)', color='#FF5722')
             st.caption(f"ℹ️ المنحنى الطيفي للامتصاصية الفعلي مقاساً بين {int(wavelength.min())} و {int(wavelength.max())} نانومتر.")
             
         with plot_col2:
             st.subheader("📈 مخطط تاوك التفاعلي (Tauc Plot Method)")
             y_label = '(Alpha*hnu)^2' if exponent == 2.0 else '(Alpha*hnu)^0.5'
+            # بناء DataFrame مستقل ومفهرس بطاقة الفوتون
             chart_data2 = pd.DataFrame({
-                'Photon Energy (eV)': photon_energy,
                 y_label: tauc_y
-            })
-            st.line_chart(chart_data2.set_index('Photon Energy (eV)'), color='#4CAF50')
+            }, index=np.round(photon_energy, 3))
+            
+            # رسم مخطط تاوك التفاعلي المستقر
+            st.line_chart(chart_data2, y=y_label, color='#4CAF50')
             st.caption(f"ℹ️ تقاطع المماس الخطي مع محور الطاقة يحدد فجوة الحزمة عند: {measured_bg} eV.")
             
         # جدول استعراض مراجع الأجهزة المقارن
